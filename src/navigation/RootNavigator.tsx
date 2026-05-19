@@ -7,10 +7,12 @@ import HomeScreen from '../screens/HomeScreen';
 import StoriesScreen from '../screens/StoriesScreen';
 import OptionsScreen from '../screens/OptionsScreen';
 import ARScreen from '../screens/ARScreen';
+import ARMarkerScreen from '../screens/ARMarkerScreen';
 
 export type RootStackParamList = {
   MainTabs: undefined;
   AR: undefined;
+  ARMarker: undefined;
 };
 
 type TabParamList = {
@@ -58,6 +60,11 @@ export default function RootNavigator() {
       <Stack.Screen
         name="AR"
         component={ARScreen}
+        options={{ animation: 'fade' }}
+      />
+      <Stack.Screen
+        name="ARMarker"
+        component={ARMarkerScreen}
         options={{ animation: 'fade' }}
       />
     </Stack.Navigator>

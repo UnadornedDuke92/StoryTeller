@@ -29,7 +29,12 @@ export default function HomeScreen() {
         <TouchableOpacity
           style={styles.heroButton}
           onPress={() => navigation.navigate('AR')}>
-          <Text style={styles.heroButtonText}>Launch AR Experience</Text>
+          <Text style={styles.heroButtonText}>Free AR Session</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.heroButton, styles.markerButton]}
+          onPress={() => navigation.navigate('ARMarker')}>
+          <Text style={styles.heroButtonText}>Scan Marker</Text>
         </TouchableOpacity>
       </View>
 
@@ -82,6 +87,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 28,
+    marginTop: 10,
+  },
+  markerButton: {
+    backgroundColor: '#CC44FF',
   },
   heroButtonText: {
     color: '#FFFFFF',

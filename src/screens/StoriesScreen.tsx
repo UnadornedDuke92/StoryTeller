@@ -35,24 +35,31 @@ export default function StoriesScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.row}
-            onPress={() => navigation.navigate('AR')}>
+            onPress={() => navigation.navigate('ARMarker')}>
             <View style={[styles.dot, { backgroundColor: item.color }]} />
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>{item.title}</Text>
               <Text style={styles.rowDesc}>{item.desc}</Text>
             </View>
             <View style={styles.orbBadge}>
-              <Text style={styles.orbCount}>{item.orbs}</Text>
-              <Text style={styles.orbLabel}>orbs</Text>
+              <Text style={styles.scanIcon}>⬡</Text>
+              <Text style={styles.orbLabel}>scan</Text>
             </View>
           </TouchableOpacity>
         )}
         ListFooterComponent={
-          <TouchableOpacity
-            style={styles.newButton}
-            onPress={() => navigation.navigate('AR')}>
-            <Text style={styles.newButtonText}>+ Start AR Session</Text>
-          </TouchableOpacity>
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.markerButton}
+              onPress={() => navigation.navigate('ARMarker')}>
+              <Text style={styles.markerButtonText}>Scan Marker</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.newButton}
+              onPress={() => navigation.navigate('AR')}>
+              <Text style={styles.newButtonText}>Free AR Session</Text>
+            </TouchableOpacity>
+          </View>
         }
       />
     </View>
@@ -114,8 +121,27 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#8899BB',
   },
-  newButton: {
+  scanIcon: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#4488FF',
+  },
+  footer: {
     marginTop: 16,
+    gap: 10,
+  },
+  markerButton: {
+    backgroundColor: '#CC44FF',
+    borderRadius: 14,
+    padding: 18,
+    alignItems: 'center',
+  },
+  markerButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  newButton: {
     backgroundColor: '#4488FF',
     borderRadius: 14,
     padding: 18,
