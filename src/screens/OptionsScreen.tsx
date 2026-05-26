@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,14 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
+import { useSettings } from '../context/SettingsContext';
 
-type RowSwitchProps = { label: string; sub?: string; value: boolean; onToggle: (v: boolean) => void };
+type RowSwitchProps = {
+  label: string;
+  sub?: string;
+  value: boolean;
+  onToggle: (v: boolean) => void;
+};
 
 function RowSwitch({ label, sub, value, onToggle }: RowSwitchProps) {
   return (
@@ -28,10 +34,7 @@ function RowSwitch({ label, sub, value, onToggle }: RowSwitchProps) {
 }
 
 export default function OptionsScreen() {
-  const [haptics, setHaptics] = useState(true);
-  const [sound, setSound] = useState(true);
-  const [planeViz, setPlaneViz] = useState(false);
-  const [highQuality, setHighQuality] = useState(false);
+  const { settings, update } = useSettings();
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -41,24 +44,34 @@ export default function OptionsScreen() {
       <View style={styles.card}>
         <RowSwitch
           label="Show Plane Guides"
-          sub="Visualize detected surfaces"
-          value={planeViz}
-          onToggle={setPlaneViz}
+          sub="Highlight detected surfaces in AR"
+          value={settings.planeViz}
+          onToggle={v => update({ planeViz: v })}
         />
         <View style={styles.divider} />
         <RowSwitch
           label="High Quality Rendering"
-          sub="Better visuals, more battery usage"
-          value={highQuality}
-          onToggle={setHighQuality}
+          sub="Enables HDR, bloom & shadows — uses more battery"
+          value={settings.highQuality}
+          onToggle={v => update({ highQuality: v })}
         />
       </View>
 
       <Text style={styles.section}>Experience</Text>
       <View style={styles.card}>
-        <RowSwitch label="Haptic Feedback" value={haptics} onToggle={setHaptics} />
+        <RowSwitch
+          label="Haptic Feedback"
+          sub="Vibrate when a marker is detected"
+          value={settings.haptics}
+          onToggle={v => update({ haptics: v })}
+        />
         <View style={styles.divider} />
-        <RowSwitch label="Sound Effects" value={sound} onToggle={setSound} />
+        <RowSwitch
+          label="Sound Effects"
+          sub="Coming soon"
+          value={settings.sound}
+          onToggle={v => update({ sound: v })}
+        />
       </View>
 
       <Text style={styles.section}>About</Text>
@@ -83,20 +96,9 @@ export default function OptionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0a1a',
-  },
-  content: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  pageTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 24,
-  },
+  container: { flex: 1, backgroundColor: '#0a0a1a' },
+  content: { padding: 20, paddingBottom: 40 },
+  pageTitle: { fontSize: 28, fontWeight: '700', color: '#FFFFFF', marginBottom: 24 },
   section: {
     fontSize: 12,
     fontWeight: '600',
@@ -106,41 +108,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 24,
   },
-  card: {
-    backgroundColor: '#111133',
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  rowText: {
-    flex: 1,
-  },
-  rowLabel: {
-    flex: 1,
-    fontSize: 15,
-    color: '#FFFFFF',
-  },
-  rowSub: {
-    fontSize: 12,
-    color: '#8899BB',
-    marginTop: 2,
-  },
-  rowValue: {
-    fontSize: 15,
-    color: '#8899BB',
-  },
-  chevron: {
-    fontSize: 20,
-    color: '#8899BB',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#1e1e44',
-    marginLeft: 16,
-  },
+  card: { backgroundColor: '#111133', borderRadius: 14, overflow: 'hidden' },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
+  rowText: { flex: 1 },
+  rowLabel: { flex: 1, fontSize: 15, color: '#FFFFFF' },
+  rowSub: { fontSize: 12, color: '#8899BB', marginTop: 2 },
+  rowValue: { fontSize: 15, color: '#8899BB' },
+  chevron: { fontSize: 20, color: '#8899BB' },
+  divider: { height: 1, backgroundColor: '#1e1e44', marginLeft: 16 },
 });

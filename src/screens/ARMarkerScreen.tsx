@@ -7,19 +7,27 @@ import {
   TouchableOpacity,
   Animated,
   ImageSourcePropType,
+  Vibration,
+  PermissionsAndroid,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import {
   ViroARScene,
   ViroARSceneNavigator,
   ViroARImageMarker,
   ViroARTrackingTargets,
+  ViroARPlane,
   Viro3DObject,
   ViroAmbientLight,
   ViroDirectionalLight,
   ViroAnimations,
+  ViroMaterials,
   ViroNode,
+  ViroBox,
 } from '@reactvision/react-viro';
 import { useNavigation } from '@react-navigation/native';
+import { useSettings } from '../context/SettingsContext';
 
 // ---------------------------------------------------------------------------
 // 1. REGISTER YOUR MARKERS
@@ -28,7 +36,7 @@ import { useNavigation } from '@react-navigation/native';
 // ---------------------------------------------------------------------------
 ViroARTrackingTargets.createTargets({
   sample_marker: {
-    source: require('../../assets/markers/Marker1.png'),
+    source: require('../../assets/markers/FO-Marker1.png'),
     orientation: 'Up',
     physicalWidth: 0.15,
   },
@@ -36,7 +44,7 @@ ViroARTrackingTargets.createTargets({
 
 ViroAnimations.registerAnimations({
   spin: { properties: { rotateY: '+=360' }, duration: 4000 },
-  rise: { properties: { positionY: 0.1 },   duration: 600, easing: 'EaseOut' },
+  rise: { properties: { positionY: 0.1 }, duration: 600, easing: 'EaseOut' },
 });
 
 // ---------------------------------------------------------------------------
@@ -53,60 +61,117 @@ const MARKERS: Array<{
   modelFile: string | null;
   scale: [number, number, number];
 }> = [
-  {
-    target:    'sample_marker',
-    label:     'Sample Story',
-    image:     require('../../assets/markers/Marker1.png'),
-    modelFile: 'forest_lighting_wip.glb',
-    scale:     [0.005, 0.005, 0.005],
-  },
-];
+    {
+      target: 'sample_marker',
+      label: 'Sample Story',
+      image: require('../../assets/markers/Marker1.png'),
+      modelFile: 'camping_buscraft_ambience.glb',
+      scale: [0.005, 0.005, 0.005],
+    },
+  ];
 
 function assetUri(path: string) {
   return { uri: `file:///android_asset/${path}` };
 }
 
+ViroMaterials.createMaterials({
+  plane_grid: {
+    diffuseColor: 'rgba(68,136,255,0.12)',
+    lightingModel: 'Constant',
+  },
+});
+
+// Module-level — updated by the screen before AR session starts.
+const arSettings = { planeViz: false };
+
 // ---------------------------------------------------------------------------
 // Module-level callbacks — set by the screen, called by the AR scene.
-// This avoids the ViroARSceneNavigator "scene must be () => Element" constraint.
 // ---------------------------------------------------------------------------
 const sceneCallbacks = {
-  onMarkerFound: (_target: string) => {},
-  onMarkerLost:  (_target: string) => {},
+  onMarkerFound: (_target: string) => { },
+  onMarkerLost: (_target: string) => { },
+  resetModel: () => { },
+  rotateModel: (_target: string, _delta: number) => { },
 };
+
+type ModelState = { rotY: number; scaleFactor: number };
 
 // ---------------------------------------------------------------------------
 // AR Scene
 // ---------------------------------------------------------------------------
 function ARMarkerScene() {
+  const [modelStates, setModelStates] = useState<Record<string, ModelState>>({});
+  const pinchStartScale = useRef<Record<string, number>>({});
+
+  // Let the screen trigger a reset / rotation from outside the scene
+  sceneCallbacks.resetModel = () => setModelStates({});
+  sceneCallbacks.rotateModel = (target: string, delta: number) =>
+    setModelStates(prev => {
+      const curr = prev[target] ?? { rotY: 0, scaleFactor: 1 };
+      return { ...prev, [target]: { ...curr, rotY: curr.rotY + delta } };
+    });
+
+  const getState = (target: string): ModelState =>
+    modelStates[target] ?? { rotY: 0, scaleFactor: 1 };
+
+  const handlePinch = (target: string, pinchState: number, scaleFactor: number) => {
+    if (pinchState === 1) {
+      pinchStartScale.current[target] = getState(target).scaleFactor;
+      return;
+    }
+    const base = pinchStartScale.current[target] ?? 1;
+    const clamped = Math.max(0.2, Math.min(8, base * scaleFactor));
+    setModelStates(prev => {
+      const curr = prev[target] ?? { rotY: 0, scaleFactor: 1 };
+      return { ...prev, [target]: { ...curr, scaleFactor: clamped } };
+    });
+  };
+
   return (
     <ViroARScene>
-      <ViroAmbientLight color="#ffffff" intensity={200} />
-      <ViroDirectionalLight color="#ffffff" direction={[0, -1, -0.2]} intensity={400} />
+      <ViroAmbientLight color="#ffffff" intensity={400} />
+      <ViroDirectionalLight color="#ffffff" direction={[0, -1, -0.2]} castsShadow intensity={1000} />
 
-      {MARKERS.map(marker => (
-        <ViroARImageMarker
-          key={marker.target}
-          target={marker.target}
-          onAnchorFound={()  => sceneCallbacks.onMarkerFound(marker.target)}
-          onAnchorRemoved={() => sceneCallbacks.onMarkerLost(marker.target)}>
+      {arSettings.planeViz && (
+        <ViroARPlane minHeight={0.1} minWidth={0.1} alignment="Horizontal">
+          <ViroBox scale={[1, 0.002, 1]} materials={['plane_grid']} />
+        </ViroARPlane>
+      )}
 
-          {marker.modelFile ? (
-            <ViroNode
-              position={[0, 0, 0]}
-              animation={{ name: 'rise', run: true, loop: false }}>
-              <Viro3DObject
-                source={assetUri(`models/${marker.modelFile}`)}
-                resources={[]}
-                position={[0, 0, 0]}
-                scale={marker.scale}
-                type="GLB"
-                animation={{ name: 'spin', run: true, loop: true }}
-              />
-            </ViroNode>
-          ) : null}
-        </ViroARImageMarker>
-      ))}
+      {MARKERS.map(marker => {
+        const state = getState(marker.target);
+        const s = marker.scale[0] * state.scaleFactor;
+        const appliedScale: [number, number, number] = [s, s, s];
+
+        return (
+          <ViroARImageMarker
+            key={marker.target}
+            target={marker.target}
+            onAnchorFound={() => sceneCallbacks.onMarkerFound(marker.target)}
+            onAnchorRemoved={() => sceneCallbacks.onMarkerLost(marker.target)}>
+
+            {marker.modelFile ? (
+              // Outer node: rise animation when marker first appears
+              <ViroNode position={[0, 0, 0]} animation={{ name: 'rise', run: true, loop: false }}>
+                {/* Inner node: user-controlled rotation + scale */}
+                <ViroNode rotation={[0, state.rotY, 0]} scale={appliedScale}>
+                  <Viro3DObject
+                    source={assetUri(`models/${marker.modelFile}`)}
+                    resources={[]}
+                    position={[0, 0, 0]}
+                    scale={[1, 1, 1]}
+                    type="GLB"
+                    highAccuracyEvents
+                    onPinch={(pinchState, scaleFactor) =>
+                      handlePinch(marker.target, pinchState, scaleFactor)
+                    }
+                  />
+                </ViroNode>
+              </ViroNode>
+            ) : null}
+          </ViroARImageMarker>
+        );
+      })}
     </ViroARScene>
   );
 }
@@ -182,22 +247,101 @@ function MarkerCard({
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
+const ROTATE_STEP = 5;   // degrees on a single tap
+const ROTATE_HOLD_DELAY = 350;  // ms before continuous spin starts
+const ROTATE_INTERVAL = 16;   // ms between steps during hold
+const ROTATE_HOLD_STEP = 3;    // degrees per interval tick
+
+type PermState = 'checking' | 'granted' | 'denied';
+
 export default function ARMarkerScreen() {
   const navigation = useNavigation();
+  const { settings } = useSettings();
+  const [perm, setPerm] = useState<PermState>('checking');
   const [detected, setDetected] = useState<Record<string, boolean>>({});
+  const hintOpacity = useRef(new Animated.Value(0)).current;
+  const holdTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') { setPerm('granted'); return; }
+    PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA).then(result => {
+      setPerm(result === PermissionsAndroid.RESULTS.GRANTED ? 'granted' : 'denied');
+    });
+  }, []);
+
+  const startRotation = (direction: 1 | -1) => {
+    const target = MARKERS[0].target;
+    sceneCallbacks.rotateModel(target, direction * ROTATE_STEP);
+    holdTimeout.current = setTimeout(() => {
+      holdInterval.current = setInterval(() => {
+        sceneCallbacks.rotateModel(target, direction * ROTATE_HOLD_STEP);
+      }, ROTATE_INTERVAL);
+    }, ROTATE_HOLD_DELAY);
+  };
+
+  const stopRotation = () => {
+    if (holdTimeout.current) { clearTimeout(holdTimeout.current); holdTimeout.current = null; }
+    if (holdInterval.current) { clearInterval(holdInterval.current); holdInterval.current = null; }
+  };
 
   const anyDetected = Object.values(detected).some(Boolean);
+
+  arSettings.planeViz = settings.planeViz;
 
   sceneCallbacks.onMarkerFound = (target: string) =>
     setDetected(prev => ({ ...prev, [target]: true }));
   sceneCallbacks.onMarkerLost = (target: string) =>
     setDetected(prev => ({ ...prev, [target]: false }));
 
+  // Haptic feedback when first marker is detected
+  useEffect(() => {
+    if (anyDetected && settings.haptics) {
+      Vibration.vibrate(200);
+    }
+  }, [anyDetected, settings.haptics]);
+
+  // Show gesture hint briefly when a marker is first found
+  useEffect(() => {
+    if (anyDetected) {
+      Animated.sequence([
+        Animated.timing(hintOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.delay(2500),
+        Animated.timing(hintOpacity, { toValue: 0, duration: 600, useNativeDriver: true }),
+      ]).start();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyDetected]);
+
+  if (perm === 'checking') {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#4488FF" />
+        <Text style={styles.permText}>Requesting camera access…</Text>
+      </View>
+    );
+  }
+
+  if (perm === 'denied') {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Text style={styles.permTitle}>Camera access required</Text>
+        <Text style={styles.permText}>Please allow camera permission to use AR.</Text>
+        <TouchableOpacity style={styles.permBack} onPress={() => navigation.goBack()}>
+          <Text style={styles.permBackText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* Full-screen AR */}
       <ViroARSceneNavigator
         autofocus
+        pbrEnabled
+        hdrEnabled={settings.highQuality}
+        bloomEnabled={settings.highQuality}
+        shadowsEnabled={settings.highQuality}
         initialScene={{ scene: ARMarkerScene }}
         style={StyleSheet.absoluteFill}
       />
@@ -205,14 +349,48 @@ export default function ARMarkerScreen() {
       {/* Scanner frame — hidden once marker is found */}
       {!anyDetected && <ScannerFrame />}
 
-      {/* "Marker found" banner */}
+      {/* Detected banner */}
       {anyDetected && (
         <View style={styles.foundBanner}>
           <Text style={styles.foundText}>Marker detected</Text>
         </View>
       )}
 
-      {/* Bottom cards — one per marker */}
+      {/* Gesture hint — fades in then auto-hides */}
+      <Animated.View
+        style={[styles.gestureHint, { opacity: hintOpacity }]}
+        pointerEvents="none">
+        <Text style={styles.gestureHintText}>Pinch to scale</Text>
+      </Animated.View>
+
+      {/* Rotation buttons — visible when a model is shown */}
+      {anyDetected && (
+        <View style={styles.rotationControls}>
+          <TouchableOpacity
+            style={styles.rotateButton}
+            onPressIn={() => startRotation(-1)}
+            onPressOut={stopRotation}>
+            <Text style={styles.rotateButtonText}>‹</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.rotateButton}
+            onPressIn={() => startRotation(1)}
+            onPressOut={stopRotation}>
+            <Text style={styles.rotateButtonText}>›</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Reset button — only visible when a model is shown */}
+      {anyDetected && (
+        <TouchableOpacity
+          style={styles.resetButton}
+          onPress={() => sceneCallbacks.resetModel()}>
+          <Text style={styles.resetText}>↺  Reset</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Bottom cards */}
       <View style={styles.cardRow}>
         {MARKERS.map(marker => (
           <MarkerCard
@@ -235,7 +413,40 @@ const CORNER_SIZE = 28;
 const CORNER_THICKNESS = 3;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
+  container: { flex: 1, backgroundColor: '#0a0a1a' },
+
+  // --- Permission screens ---
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  permTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  permText: {
+    fontSize: 14,
+    color: '#8899BB',
+    textAlign: 'center',
+    paddingHorizontal: 32,
+    marginTop: 4,
+  },
+  permBack: {
+    marginTop: 8,
+    backgroundColor: '#4488FF',
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  permBackText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
 
   // --- Scanner frame ---
   scannerFrame: {
@@ -253,9 +464,9 @@ const styles = StyleSheet.create({
     height: CORNER_SIZE,
     borderColor: '#4488FF',
   },
-  cornerTL: { top: 0,    left: 0,  borderTopWidth: CORNER_THICKNESS, borderLeftWidth: CORNER_THICKNESS },
-  cornerTR: { top: 0,    right: 0, borderTopWidth: CORNER_THICKNESS, borderRightWidth: CORNER_THICKNESS },
-  cornerBL: { bottom: 0, left: 0,  borderBottomWidth: CORNER_THICKNESS, borderLeftWidth: CORNER_THICKNESS },
+  cornerTL: { top: 0, left: 0, borderTopWidth: CORNER_THICKNESS, borderLeftWidth: CORNER_THICKNESS },
+  cornerTR: { top: 0, right: 0, borderTopWidth: CORNER_THICKNESS, borderRightWidth: CORNER_THICKNESS },
+  cornerBL: { bottom: 0, left: 0, borderBottomWidth: CORNER_THICKNESS, borderLeftWidth: CORNER_THICKNESS },
   cornerBR: { bottom: 0, right: 0, borderBottomWidth: CORNER_THICKNESS, borderRightWidth: CORNER_THICKNESS },
 
   // --- Found banner ---
@@ -330,6 +541,65 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '700',
+  },
+
+  // --- Gesture hint ---
+  gestureHint: {
+    position: 'absolute',
+    top: 160,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  gestureHintText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+
+  // --- Rotation buttons ---
+  rotationControls: {
+    position: 'absolute',
+    bottom: 160,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+  },
+  rotateButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(68,136,255,0.5)',
+  },
+  rotateButtonText: {
+    color: '#FFFFFF',
+    fontSize: 32,
+    lineHeight: 36,
+    fontWeight: '300',
+  },
+
+  // --- Reset button ---
+  resetButton: {
+    position: 'absolute',
+    top: 52,
+    left: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  resetText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   // --- Close button ---

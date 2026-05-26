@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { StyleSheet, TouchableOpacity, View, Text } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, TouchableOpacity, View, Text, PermissionsAndroid, Platform, ActivityIndicator } from 'react-native';
 import {
   ViroARScene,
   ViroARSceneNavigator,
+  ViroARPlane,
   ViroText,
   ViroSphere,
+  ViroBox,
   ViroAmbientLight,
   ViroDirectionalLight,
   ViroNode,
@@ -13,6 +15,7 @@ import {
   ViroARPlaneSelector,
 } from '@reactvision/react-viro';
 import { useNavigation } from '@react-navigation/native';
+import { useSettings } from '../context/SettingsContext';
 
 ViroAnimations.registerAnimations({
   spin: { properties: { rotateY: '+=360' }, duration: 3000 },
@@ -24,7 +27,10 @@ ViroMaterials.createMaterials({
   orb_purple: { diffuseColor: '#CC44FF', lightingModel: 'Blinn' },
   orb_green:  { diffuseColor: '#44FF88', lightingModel: 'Blinn' },
   orb_red:    { diffuseColor: '#FF4466', lightingModel: 'Blinn' },
+  plane_grid: { diffuseColor: 'rgba(68,136,255,0.12)', lightingModel: 'Constant' },
 });
+
+const freeSceneSettings = { planeViz: false };
 
 const STORY_ORBS = [
   { id: 0, position: [-0.35, 0.0, -1.5] as [number, number, number], material: 'orb_blue',   story: 'Once upon\na time...' },
@@ -64,6 +70,12 @@ function ARScene() {
     <ViroARScene>
       <ViroAmbientLight color="#ffffff" intensity={200} />
       <ViroDirectionalLight color="#ffffff" direction={[0, -1, -0.2]} intensity={400} />
+
+      {freeSceneSettings.planeViz && (
+        <ViroARPlane minHeight={0.1} minWidth={0.1} alignment="Horizontal">
+          <ViroBox scale={[1, 0.002, 1]} materials={['plane_grid']} />
+        </ViroARPlane>
+      )}
 
       <ViroText
         text="StoryTeller AR"
@@ -118,13 +130,50 @@ const arTextStyles = {
   story: { fontFamily: 'Arial', fontSize: 16, color: '#FFFFFF', textAlign: 'center' as const, textAlignVertical: 'center' as const },
 };
 
+type PermState = 'checking' | 'granted' | 'denied';
+
 export default function ARScreen() {
   const navigation = useNavigation();
+  const { settings } = useSettings();
+  const [perm, setPerm] = useState<PermState>('checking');
+
+  freeSceneSettings.planeViz = settings.planeViz;
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') { setPerm('granted'); return; }
+    PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA).then(result => {
+      setPerm(result === PermissionsAndroid.RESULTS.GRANTED ? 'granted' : 'denied');
+    });
+  }, []);
+
+  if (perm === 'checking') {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#4488FF" />
+        <Text style={styles.permText}>Requesting camera access…</Text>
+      </View>
+    );
+  }
+
+  if (perm === 'denied') {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Text style={styles.permTitle}>Camera access required</Text>
+        <Text style={styles.permText}>Please allow camera permission to use AR.</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <ViroARSceneNavigator
         autofocus
+        hdrEnabled={settings.highQuality}
+        bloomEnabled={settings.highQuality}
+        shadowsEnabled={settings.highQuality}
         initialScene={{ scene: ARScene }}
         style={StyleSheet.absoluteFill}
       />
@@ -138,6 +187,38 @@ export default function ARScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0a0a1a',
+  },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  permTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  permText: {
+    fontSize: 14,
+    color: '#8899BB',
+    textAlign: 'center',
+    paddingHorizontal: 32,
+    marginTop: 4,
+  },
+  backButton: {
+    marginTop: 8,
+    backgroundColor: '#4488FF',
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  backButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
   },
   closeButton: {
     position: 'absolute',
