@@ -64,7 +64,7 @@ const MARKERS: Array<{
     {
       target: 'sample_marker',
       label: 'Sample Story',
-      image: require('../../assets/markers/Marker1.png'),
+      image: require('../../assets/markers/FO-Marker1.png'),
       modelFile: 'camping_buscraft_ambience.glb',
       scale: [0.005, 0.005, 0.005],
     },
