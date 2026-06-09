@@ -25,8 +25,10 @@ import {
   ViroBox,
   ViroSound,
 } from '@reactvision/react-viro';
-import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useSettings } from '../context/SettingsContext';
 import {
@@ -36,7 +38,16 @@ import {
   TEARDROP_POSITION,
 } from '../data/stories';
 
-type Nav = NativeStackNavigationProp<RootStackParamList>;
+type Nav   = NativeStackNavigationProp<RootStackParamList>;
+type Route = RouteProp<RootStackParamList, 'ARStory'>;
+
+function progressKey(storyId: string) { return `progress_${storyId}`; }
+async function saveProgress(storyId: string, step: number) {
+  await AsyncStorage.setItem(progressKey(storyId), String(step));
+}
+async function clearProgress(storyId: string) {
+  await AsyncStorage.removeItem(progressKey(storyId));
+}
 
 // ---------------------------------------------------------------------------
 // Register all 7 markers once at module load
@@ -56,8 +67,8 @@ ViroARTrackingTargets.createTargets(targetDefs);
 // ---------------------------------------------------------------------------
 ViroAnimations.registerAnimations({
   rise:        { properties: { positionY: 0.1 },          duration: 600,  easing: 'EaseOut' },
-  tearFloat:   { properties: { rotateY: '+=360' },         duration: 4000 },
-  tearCollect: { properties: { scaleX: 0.001, scaleY: 0.001, scaleZ: 0.001 }, duration: 400, easing: 'EaseIn' },
+  tearFloat:   { properties: { rotateY: '+=360' },         duration: 6000 },
+  tearCollect: { properties: { scaleX: 1.5, scaleY: 1.5, scaleZ: 1.5, opacity: 0 }, duration: 500, easing: 'EaseOut' },
 });
 
 ViroMaterials.createMaterials({
@@ -71,7 +82,7 @@ function assetUri(path: string) {
 // ---------------------------------------------------------------------------
 // Module-level shared state (screen writes, scene reads on re-render)
 // ---------------------------------------------------------------------------
-const arStoryState = { currentStep: 0, planeViz: false };
+const arStoryState = { currentStep: 0, planeViz: false, transitioning: false };
 
 type ModelState = { rotY: number; scaleFactor: number };
 
@@ -90,13 +101,13 @@ const storyCallbacks = {
 // ---------------------------------------------------------------------------
 function ARStoryScene() {
   const [, setSceneTick] = useState(0);
-  const [modelStates,       setModelStates]       = useState<Record<string, ModelState>>({});
-  const [markerFoundScene,  setMarkerFoundScene]  = useState(false);
+  const [modelStates,  setModelStates]  = useState<Record<string, ModelState>>({});
+  const [audioStarted, setAudioStarted] = useState(false);
   const [tearState,         setTearState]         = useState<'idle' | 'collecting' | 'collected'>('idle');
   const pinchStartScale = useRef<Record<string, number>>({});
   const collectTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const step = MARKER_STEPS[arStoryState.currentStep];
+  const step = MARKER_STEPS[arStoryState.currentStep] ?? MARKER_STEPS[0];
 
   // Register callbacks so the screen can drive the scene
   storyCallbacks.resetModel = () => setModelStates({});
@@ -109,10 +120,19 @@ function ARStoryScene() {
   };
   storyCallbacks.advanceScene = () => {
     if (collectTimer.current) { clearTimeout(collectTimer.current); collectTimer.current = null; }
-    setSceneTick(t => t + 1);
-    setMarkerFoundScene(false);
+
+    // Phase 1: clear the old marker immediately so ARCore releases the anchor cleanly
+    arStoryState.transitioning = true;
+    setAudioStarted(false);
     setTearState('idle');
     setModelStates({});
+    setSceneTick(t => t + 1);
+
+    // Phase 2: after the native anchor is released, mount the new marker
+    setTimeout(() => {
+      arStoryState.transitioning = false;
+      setSceneTick(t => t + 1);
+    }, 400);
   };
 
   const getState = (key: string): ModelState =>
@@ -150,8 +170,8 @@ function ARStoryScene() {
         </ViroARPlane>
       )}
 
-      {/* Ambient narration — starts as soon as marker is found */}
-      {markerFoundScene && (
+      {/* Ambient narration — starts on first marker find, stays mounted even if tracking drops */}
+      {!arStoryState.transitioning && audioStarted && (
         <ViroSound
           key={step.index}
           source={assetUri(step.audioFile)}
@@ -162,11 +182,13 @@ function ARStoryScene() {
         />
       )}
 
+      {/* Marker hidden during 400ms transition so ARCore releases the old anchor cleanly */}
+      {!arStoryState.transitioning && (
       <ViroARImageMarker
         key={step.targetName}
         target={step.targetName}
-        onAnchorFound={()  => { setMarkerFoundScene(true);  storyCallbacks.onMarkerFound(); }}
-        onAnchorRemoved={() => { setMarkerFoundScene(false); storyCallbacks.onMarkerLost();  }}>
+        onAnchorFound={()  => { if (!audioStarted) { setAudioStarted(true); } storyCallbacks.onMarkerFound(); }}
+        onAnchorRemoved={() => { storyCallbacks.onMarkerLost(); }}>
 
         {/* Story models for this step */}
         {step.models.length > 0 && (
@@ -180,6 +202,7 @@ function ARStoryScene() {
                   source={assetUri(`models/${model.file}`)}
                   resources={[]}
                   position={model.position ?? [0, 0, 0]}
+                  rotation={model.rotation ?? [0, 0, 0]}
                   scale={model.scale}
                   type="GLB"
                   highAccuracyEvents
@@ -197,6 +220,7 @@ function ARStoryScene() {
         {tearState !== 'collected' && (
           <ViroNode
             position={TEARDROP_POSITION}
+            opacity={1}
             animation={{
               name: tearState === 'collecting' ? 'tearCollect' : 'tearFloat',
               run: true,
@@ -213,6 +237,7 @@ function ARStoryScene() {
           </ViroNode>
         )}
       </ViroARImageMarker>
+      )}
     </ViroARScene>
   );
 }
@@ -257,11 +282,13 @@ type PermState = 'checking' | 'granted' | 'denied';
 // Screen
 // ---------------------------------------------------------------------------
 export default function ARStoryScreen() {
-  const navigation = useNavigation<Nav>();
+  const navigation            = useNavigation<Nav>();
+  const route                 = useRoute<Route>();
+  const { storyId, initialStep = 0 } = route.params;
   const { settings } = useSettings();
 
   const [perm,          setPerm]          = useState<PermState>('checking');
-  const [currentStep,   setCurrentStep]   = useState(0);
+  const [currentStep,   setCurrentStep]   = useState(initialStep);
   const [markerFound,   setMarkerFound]   = useState(false);
   const [audioFinished, setAudioFinished] = useState(false);
   const [teardropDone,  setTeardropDone]  = useState(false);
@@ -275,9 +302,9 @@ export default function ARStoryScreen() {
   arStoryState.planeViz    = settings.planeViz;
 
   // Wire screen-level callbacks
-  storyCallbacks.onMarkerFound = () => setMarkerFound(true);
-  storyCallbacks.onMarkerLost  = () => setMarkerFound(false);
-  storyCallbacks.onAudioEnd    = () => setAudioFinished(true);
+  storyCallbacks.onMarkerFound       = () => setMarkerFound(true);
+  storyCallbacks.onMarkerLost        = () => setMarkerFound(false);
+  storyCallbacks.onAudioEnd          = () => setAudioFinished(true);
   storyCallbacks.onTeardropCollected = () => setTeardropDone(true);
 
   // Camera permission
@@ -322,12 +349,18 @@ export default function ARStoryScreen() {
     setAudioFinished(false);
     setTeardropDone(false);
     storyCallbacks.advanceScene();
+    saveProgress(storyId, next);
   };
 
   const finish = (choice: string) => {
-    // TODO: persist the choice for a completion screen
     console.log('Story ended with choice:', choice);
+    clearProgress(storyId);
     navigation.navigate('MainTabs');
+  };
+
+  const exitAndSave = () => {
+    saveProgress(storyId, currentStep);
+    navigation.goBack();
   };
 
   const step = MARKER_STEPS[currentStep];
@@ -354,8 +387,9 @@ export default function ARStoryScreen() {
   }
 
   const isLastStep    = currentStep === MARKER_STEPS.length - 1;
-  const showNext      = markerFound && audioFinished && !isLastStep;
-  const showChoices   = markerFound && audioFinished && isLastStep && !!step.endChoices;
+  const readyToAdvance = markerFound && audioFinished && teardropDone;
+  const showNext      = readyToAdvance && !isLastStep;
+  const showChoices   = readyToAdvance && isLastStep && !!step.endChoices;
 
   // ----------- AR experience -----------
   return (
@@ -422,7 +456,13 @@ export default function ARStoryScreen() {
           <View style={styles.cardText}>
             <Text style={styles.cardLabel}>Marcador {currentStep + 1}</Text>
             <Text style={styles.cardSub}>
-              {markerFound ? (audioFinished ? 'Audio completado' : 'Reproduciendo…') : 'Escanea este marcador'}
+              {!markerFound
+                ? 'Escanea este marcador'
+                : !teardropDone
+                  ? 'Recoge la lágrima para continuar'
+                  : !audioFinished
+                    ? 'Reproduciendo narración…'
+                    : 'Listo — avanza al siguiente'}
             </Text>
           </View>
           {teardropDone && (
@@ -456,8 +496,8 @@ export default function ARStoryScreen() {
         </View>
       )}
 
-      {/* Close */}
-      <TouchableOpacity style={styles.close} onPress={() => navigation.goBack()}>
+      {/* Close — saves progress so the user can continue later */}
+      <TouchableOpacity style={styles.close} onPress={exitAndSave}>
         <Text style={styles.closeText}>✕</Text>
       </TouchableOpacity>
     </View>

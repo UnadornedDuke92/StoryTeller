@@ -6,17 +6,13 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import HomeScreen from '../screens/HomeScreen';
 import StoriesScreen from '../screens/StoriesScreen';
 import OptionsScreen from '../screens/OptionsScreen';
-import ARScreen from '../screens/ARScreen';
-import ARMarkerScreen from '../screens/ARMarkerScreen';
 import StoryDetailScreen from '../screens/StoryDetailScreen';
 import ARStoryScreen from '../screens/ARStoryScreen';
 
 export type RootStackParamList = {
   MainTabs: undefined;
-  AR: undefined;
-  ARMarker: undefined;
   StoryDetail: { storyId: string };
-  ARStory: { storyId: string };
+  ARStory: { storyId: string; initialStep?: number };
 };
 
 type TabParamList = {
@@ -61,16 +57,6 @@ export default function RootNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MainTabs" component={MainTabs} />
-      <Stack.Screen
-        name="AR"
-        component={ARScreen}
-        options={{ animation: 'fade' }}
-      />
-      <Stack.Screen
-        name="ARMarker"
-        component={ARMarkerScreen}
-        options={{ animation: 'fade' }}
-      />
       <Stack.Screen
         name="StoryDetail"
         component={StoryDetailScreen}

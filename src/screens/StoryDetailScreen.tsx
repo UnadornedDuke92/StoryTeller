@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,19 +6,43 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { STORIES } from '../data/stories';
+import { STORIES, MARKER_STEPS } from '../data/stories';
 
 type Nav   = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'StoryDetail'>;
+
+function progressKey(storyId: string) { return `progress_${storyId}`; }
 
 export default function StoryDetailScreen() {
   const navigation = useNavigation<Nav>();
   const route      = useRoute<Route>();
   const story      = STORIES.find(s => s.id === route.params.storyId);
+
+  const [savedStep, setSavedStep] = useState<number | null>(null);
+
+  useFocusEffect(useCallback(() => {
+    if (!story?.complete) { return; }
+    AsyncStorage.getItem(progressKey(story.id)).then(val => {
+      const n = val !== null ? parseInt(val, 10) : null;
+      setSavedStep(n !== null && n > 0 ? n : null);
+    });
+  }, [story]));
+
+  const startFresh = async () => {
+    if (!story) { return; }
+    await AsyncStorage.removeItem(progressKey(story.id));
+    navigation.navigate('ARStory', { storyId: story.id, initialStep: 0 });
+  };
+
+  const continueStory = () => {
+    if (!story || savedStep === null) { return; }
+    navigation.navigate('ARStory', { storyId: story.id, initialStep: savedStep });
+  };
 
   if (!story) {
     return (
@@ -27,6 +51,10 @@ export default function StoryDetailScreen() {
       </View>
     );
   }
+
+  const savedMarkerLabel = savedStep !== null
+    ? `Marcador ${savedStep + 1} / ${MARKER_STEPS.length}`
+    : null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -62,11 +90,25 @@ export default function StoryDetailScreen() {
             </View>
             <View style={styles.divider} />
 
-            <TouchableOpacity
-              style={styles.startButton}
-              onPress={() => navigation.navigate('ARStory', { storyId: story.id })}>
-              <Text style={styles.startButtonText}>Comenzar AR  →</Text>
-            </TouchableOpacity>
+            {/* Saved checkpoint */}
+            {savedMarkerLabel ? (
+              <View style={styles.checkpointBlock}>
+                <Text style={styles.checkpointTitle}>Progreso guardado</Text>
+                <Text style={styles.checkpointSub}>Continuarás desde el {savedMarkerLabel}</Text>
+
+                <TouchableOpacity style={styles.continueButton} onPress={continueStory}>
+                  <Text style={styles.continueButtonText}>Continuar  →</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.resetButton} onPress={startFresh}>
+                  <Text style={styles.resetButtonText}>Reiniciar desde el principio</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.startButton} onPress={startFresh}>
+                <Text style={styles.startButtonText}>Comenzar AR  →</Text>
+              </TouchableOpacity>
+            )}
           </>
         ) : (
           <View style={styles.comingSoonBlock}>
@@ -133,6 +175,45 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: 14, color: '#8899BB' },
   infoValue: { fontSize: 14, color: '#FFFFFF', fontWeight: '600' },
   divider:   { height: 1, backgroundColor: '#1a1a3a' },
+
+  checkpointBlock: {
+    backgroundColor: '#111133',
+    borderRadius: 16,
+    padding: 20,
+    marginTop: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(68,136,255,0.3)',
+  },
+  checkpointTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4488FF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  checkpointSub: {
+    fontSize: 14,
+    color: '#AABBCC',
+    marginBottom: 20,
+  },
+  continueButton: {
+    backgroundColor: '#4488FF',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  continueButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+
+  resetButton: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a2a4a',
+  },
+  resetButtonText: { color: '#8899BB', fontSize: 14, fontWeight: '600' },
 
   startButton: {
     backgroundColor: '#4488FF',

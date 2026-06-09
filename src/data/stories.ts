@@ -2,6 +2,7 @@ export type ModelConfig = {
   file: string;
   scale: [number, number, number];
   position?: [number, number, number];
+  rotation?: [number, number, number];
 };
 
 export type MarkerStep = {
@@ -22,84 +23,88 @@ export type Story = {
   complete: boolean;
 };
 
-export const TEARDROP_FILE = 'frozen_tear.glb';
-export const TEARDROP_SCALE: [number, number, number] = [0.002, 0.002, 0.002];
-export const TEARDROP_POSITION: [number, number, number] = [0.1, 0.06, 0];
+export const TEARDROP_FILE = 'Tear.glb';
+export const TEARDROP_SCALE: [number, number, number] = [0.0005, 0.0005, 0.0005];
+export const TEARDROP_POSITION: [number, number, number] = [-0.005, 0.1, 0.025];
 
 export const MARKER_STEPS: MarkerStep[] = [
   {
-    // Marker 1: camping scene + teardrop (teardrop is smaller but visible)
+    // Marker 1: camping scene + teardrop
     index: 0,
     targetName: 'fo_marker_1',
     markerImage: require('../../assets/markers/FO-Marker1.png'),
     physicalWidth: 0.15,
     models: [
-      { file: 'camping_buscraft_ambience.glb', scale: [0.003, 0.003, 0.003], position: [0, 0, 0] },
+      { file: 'Camp_backup.glb', scale: [0.003, 0.003, 0.003], position: [0, 0, 0], rotation: [0, -60, 0] },
     ],
     audioFile: 'audio/Audio_Narrador1.wav',
   },
   {
-    // Marker 2: Project 2 + teardrop
+    // Marker 2: Niko (guide) + teardrop
     index: 1,
     targetName: 'fo_marker_2',
     markerImage: require('../../assets/markers/FO-Marker2.png'),
     physicalWidth: 0.15,
     models: [
-      { file: 'Project 2.glb', scale: [0.005, 0.005, 0.005], position: [0, 0, 0] },
+      { file: 'Niko.glb', scale: [0.03, 0.03, 0.03], position: [0, 0, 0] },
     ],
     audioFile: 'audio/Audio_Narrador2.wav',
   },
   {
-    // Marker 3: teardrop only — both scene models TBD
+    // Marker 3: Tricky_tree + Niko (guide) + teardrop
     index: 2,
     targetName: 'fo_marker_3',
     markerImage: require('../../assets/markers/FO-Marker3.png'),
     physicalWidth: 0.15,
-    models: [],
+    models: [
+      { file: 'Tricky_tree.glb', scale: [0.03, 0.03, 0.03], position: [0, 0, 0] },
+      { file: 'Niko.glb', scale: [0.005, 0.005, 0.005], position: [0, -0.012, 0.005] },
+    ],
     audioFile: 'audio/Audio_Narrador3.wav',
   },
   {
-    // Marker 4: golem (left) + Project 2 (right) + teardrop
+    // Marker 4: Golem + Niko (guide) + teardrop
     index: 3,
     targetName: 'fo_marker_4',
     markerImage: require('../../assets/markers/FO-Marker4.png'),
     physicalWidth: 0.15,
     models: [
-      { file: 'ricky_the_golem.glb',  scale: [0.005, 0.005, 0.005], position: [-0.1, 0, 0] },
-      { file: 'Project 2.glb',        scale: [0.005, 0.005, 0.005], position: [0.1, 0, 0] },
+      { file: 'Golem.glb', scale: [0.03, 0.03, 0.03], position: [0, 0, 0] },
+      { file: 'Niko.glb', scale: [0.007, 0.007, 0.007], position: [0.015, 0, 0.025], rotation: [0, 200, 0] },
     ],
     audioFile: 'audio/Audio_Narrador4.wav',
   },
   {
-    // Marker 5: Project 2 + teardrop — second model TBD
+    // Marker 5: Niko (guide) + teardrop
     index: 4,
     targetName: 'fo_marker_5',
     markerImage: require('../../assets/markers/FO-Marker5.png'),
     physicalWidth: 0.15,
     models: [
-      { file: 'Project 2.glb', scale: [0.005, 0.005, 0.005], position: [0, 0, 0] },
+      { file: 'Niko.glb', scale: [0.03, 0.03, 0.03], position: [0, 0, 0] },
     ],
     audioFile: 'audio/Audio_Narrador5.wav',
   },
   {
-    // Marker 6: Project 2 + teardrop — second model TBD
+    // Marker 6: Niko (guide) + teardrop
     index: 5,
     targetName: 'fo_marker_6',
     markerImage: require('../../assets/markers/FO-Marker6.png'),
     physicalWidth: 0.15,
     models: [
-      { file: 'Project 2.glb', scale: [0.005, 0.005, 0.005], position: [0, 0, 0] },
+      { file: 'Niko.glb', scale: [0.03, 0.03, 0.03], position: [0, 0, 0] },
     ],
     audioFile: 'audio/Audio_Narrador6.wav',
   },
   {
-    // Marker 7: Project 2 + teardrop — second model TBD; final choice step
+    // Marker 7: Paths + Niko (guide) + teardrop — final choice step
     index: 6,
     targetName: 'fo_marker_7',
     markerImage: require('../../assets/markers/FO-Marker7.png'),
     physicalWidth: 0.15,
     models: [
-      { file: 'Project 2.glb', scale: [0.005, 0.005, 0.005], position: [0, 0, 0] },
+      { file: 'Paths.glb', scale: [0.075, 0.075, 0.075], position: [0, 0, 0] },
+      { file: 'Niko.glb', scale: [0.03, 0.03, 0.03], position: [0.01, 0, 0] },
     ],
     audioFile: 'audio/Audio_Narrador7.wav',
     endChoices: ['Guardarlas', 'Dejarlas ir'],
