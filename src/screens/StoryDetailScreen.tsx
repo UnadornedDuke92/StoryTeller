@@ -89,6 +89,13 @@ export default function StoryDetailScreen() {
               <Text style={styles.infoValue}>~15 min</Text>
             </View>
             <View style={styles.divider} />
+            <TouchableOpacity
+              style={styles.infoRow}
+              onPress={() => navigation.navigate('Markers')}>
+              <Text style={styles.infoLabel}>Marcadores</Text>
+              <Text style={styles.markersLink}>Ver e imprimir  ›</Text>
+            </TouchableOpacity>
+            <View style={styles.divider} />
 
             {/* Saved checkpoint */}
             {savedMarkerLabel ? (
@@ -172,9 +179,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
   },
-  infoLabel: { fontSize: 14, color: '#8899BB' },
-  infoValue: { fontSize: 14, color: '#FFFFFF', fontWeight: '600' },
-  divider:   { height: 1, backgroundColor: '#1a1a3a' },
+  infoLabel:   { fontSize: 14, color: '#8899BB' },
+  infoValue:   { fontSize: 14, color: '#FFFFFF', fontWeight: '600' },
+  markersLink: { fontSize: 14, color: '#4488FF', fontWeight: '600' },
+  divider:     { height: 1, backgroundColor: '#1a1a3a' },
 
   checkpointBlock: {
     backgroundColor: '#111133',

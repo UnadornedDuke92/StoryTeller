@@ -38,7 +38,7 @@ import {
   TEARDROP_POSITION,
 } from '../data/stories';
 
-type Nav   = NativeStackNavigationProp<RootStackParamList>;
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'ARStory'>;
 
 function progressKey(storyId: string) { return `progress_${storyId}`; }
@@ -66,8 +66,8 @@ ViroARTrackingTargets.createTargets(targetDefs);
 // Animations & materials
 // ---------------------------------------------------------------------------
 ViroAnimations.registerAnimations({
-  rise:        { properties: { positionY: 0.1 },          duration: 600,  easing: 'EaseOut' },
-  tearFloat:   { properties: { rotateY: '+=360' },         duration: 6000 },
+  rise: { properties: { positionY: 0.1 }, duration: 600, easing: 'EaseOut' },
+  tearFloat: { properties: { rotateY: '+=360' }, duration: 6000 },
   tearCollect: { properties: { scaleX: 1.5, scaleY: 1.5, scaleZ: 1.5, opacity: 0 }, duration: 500, easing: 'EaseOut' },
 });
 
@@ -87,13 +87,13 @@ const arStoryState = { currentStep: 0, planeViz: false, transitioning: false };
 type ModelState = { rotY: number; scaleFactor: number };
 
 const storyCallbacks = {
-  onMarkerFound:      () => {},
-  onMarkerLost:       () => {},
-  onAudioEnd:         () => {},
-  onTeardropCollected:() => {},
-  resetModel:         () => {},
-  rotateModel:        (_delta: number) => {},
-  advanceScene:       () => {},
+  onMarkerFound: () => { },
+  onMarkerLost: () => { },
+  onAudioEnd: () => { },
+  onTeardropCollected: () => { },
+  resetModel: () => { },
+  rotateModel: (_delta: number) => { },
+  advanceScene: () => { },
 };
 
 // ---------------------------------------------------------------------------
@@ -101,11 +101,15 @@ const storyCallbacks = {
 // ---------------------------------------------------------------------------
 function ARStoryScene() {
   const [, setSceneTick] = useState(0);
-  const [modelStates,  setModelStates]  = useState<Record<string, ModelState>>({});
+  const [modelStates, setModelStates] = useState<Record<string, ModelState>>({});
   const [audioStarted, setAudioStarted] = useState(false);
-  const [tearState,         setTearState]         = useState<'idle' | 'collecting' | 'collected'>('idle');
+  const [tearState,    setTearState]    = useState<'idle' | 'collecting' | 'collected'>('idle');
+  const [smoothOffset, setSmoothOffset] = useState<[number, number, number]>([0, 0, 0]);
   const pinchStartScale = useRef<Record<string, number>>({});
   const collectTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rawPosRef       = useRef<[number, number, number]>([0, 0, 0]);
+  const lerpPosRef      = useRef<[number, number, number]>([0, 0, 0]);
+  const rafIdRef        = useRef<number | null>(null);
 
   const step = MARKER_STEPS[arStoryState.currentStep] ?? MARKER_STEPS[0];
 
@@ -126,6 +130,10 @@ function ARStoryScene() {
     setAudioStarted(false);
     setTearState('idle');
     setModelStates({});
+    if (rafIdRef.current !== null) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null; }
+    rawPosRef.current  = [0, 0, 0];
+    lerpPosRef.current = [0, 0, 0];
+    setSmoothOffset([0, 0, 0]);
     setSceneTick(t => t + 1);
 
     // Phase 2: after the native anchor is released, mount the new marker
@@ -140,7 +148,7 @@ function ARStoryScene() {
 
   const handlePinch = (key: string, pinchState: number, scaleFactor: number) => {
     if (pinchState === 1) { pinchStartScale.current[key] = getState(key).scaleFactor; return; }
-    const base    = pinchStartScale.current[key] ?? 1;
+    const base = pinchStartScale.current[key] ?? 1;
     const clamped = Math.max(0.2, Math.min(8, base * scaleFactor));
     setModelStates(prev => {
       const curr = prev[key] ?? { rotY: 0, scaleFactor: 1 };
@@ -157,11 +165,41 @@ function ARStoryScene() {
     }, 450);
   };
 
+  const startLerpLoop = () => {
+    if (rafIdRef.current !== null) { return; }
+    const LERP = 0.1;
+    const loop = () => {
+      const raw  = rawPosRef.current;
+      const prev = lerpPosRef.current;
+      lerpPosRef.current = [
+        prev[0] + LERP * (raw[0] - prev[0]),
+        prev[1] + LERP * (raw[1] - prev[1]),
+        prev[2] + LERP * (raw[2] - prev[2]),
+      ];
+      setSmoothOffset([
+        lerpPosRef.current[0] - raw[0],
+        lerpPosRef.current[1] - raw[1],
+        lerpPosRef.current[2] - raw[2],
+      ]);
+      rafIdRef.current = requestAnimationFrame(loop);
+    };
+    rafIdRef.current = requestAnimationFrame(loop);
+  };
+
+  const stopLerpLoop = () => {
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+  };
+
+  useEffect(() => () => { stopLerpLoop(); }, []);
+
   const modelState = getState(step.targetName);
 
   return (
     <ViroARScene>
-      <ViroAmbientLight    color="#ffffff" intensity={400} />
+      <ViroAmbientLight color="#ffffff" intensity={400} />
       <ViroDirectionalLight color="#ffffff" direction={[0, -1, -0.2]} castsShadow intensity={1000} />
 
       {arStoryState.planeViz && (
@@ -184,59 +222,86 @@ function ARStoryScene() {
 
       {/* Marker hidden during 400ms transition so ARCore releases the old anchor cleanly */}
       {!arStoryState.transitioning && (
-      <ViroARImageMarker
-        key={step.targetName}
-        target={step.targetName}
-        onAnchorFound={()  => { if (!audioStarted) { setAudioStarted(true); } storyCallbacks.onMarkerFound(); }}
-        onAnchorRemoved={() => { storyCallbacks.onMarkerLost(); }}>
+        <ViroARImageMarker
+          key={step.targetName}
+          target={step.targetName}
+          dragType="FixedToWorld"
+          onAnchorFound={(anchor: any) => {
+            const p: [number, number, number] = anchor?.position ?? [0, 0, 0];
+            rawPosRef.current  = [p[0], p[1], p[2]];
+            lerpPosRef.current = [p[0], p[1], p[2]];
+            setSmoothOffset([0, 0, 0]);
+            startLerpLoop();
+            if (!audioStarted) { setAudioStarted(true); }
+            storyCallbacks.onMarkerFound();
+          }}
+          onAnchorUpdated={(anchor: any) => {
+            const p = anchor.position as [number, number, number];
+            rawPosRef.current = [p[0], p[1], p[2]];
+          }}
+          onAnchorRemoved={() => {
+            stopLerpLoop();
+            storyCallbacks.onMarkerLost();
+          }}>
 
-        {/* Story models for this step */}
-        {step.models.length > 0 && (
-          <ViroNode position={[0, 0, 0]} animation={{ name: 'rise', run: true, loop: false }}>
-            <ViroNode
-              rotation={[0, modelState.rotY, 0]}
-              scale={[modelState.scaleFactor, modelState.scaleFactor, modelState.scaleFactor]}>
-              {step.models.map((model, i) => (
+          <ViroNode position={smoothOffset}>
+            {/* Story models for this step */}
+            {step.models.length > 0 && (
+              <ViroNode position={[0, 0, 0]} animation={{ name: 'rise', run: true, loop: false }}>
+                <ViroNode
+                  rotation={[0, modelState.rotY, 0]}
+                  scale={[modelState.scaleFactor, modelState.scaleFactor, modelState.scaleFactor]}>
+                  {step.models.map((model, i) => (
+                    <Viro3DObject
+                      key={i}
+                      source={assetUri(`models/${model.file}`)}
+                      resources={[]}
+                      position={model.position ?? [0, 0, 0]}
+                      rotation={model.rotation ?? [0, 0, 0]}
+                      scale={model.scale}
+                      animation={model.animationName ? { name: model.animationName, run: true, loop: true } : undefined}
+                      type="GLB"
+                      highAccuracyEvents
+                      onPinch={i === 0
+                        ? (pinchState, scaleFactor) => handlePinch(step.targetName, pinchState, scaleFactor)
+                        : undefined
+                      }
+                    />
+                  ))}
+                </ViroNode>
+              </ViroNode>
+            )}
+
+            {/* Teardrop collectible — present on all 7 markers */}
+            {tearState !== 'collected' && (
+              <ViroNode
+                position={TEARDROP_POSITION}
+                opacity={1}
+                animation={{
+                  name: tearState === 'collecting' ? 'tearCollect' : 'tearFloat',
+                  run: true,
+                  loop: tearState === 'idle',
+                }}>
                 <Viro3DObject
-                  key={i}
-                  source={assetUri(`models/${model.file}`)}
+                  source={assetUri(`models/${TEARDROP_FILE}`)}
                   resources={[]}
-                  position={model.position ?? [0, 0, 0]}
-                  rotation={model.rotation ?? [0, 0, 0]}
-                  scale={model.scale}
+                  position={[0, 0, 0]}
+                  scale={TEARDROP_SCALE}
                   type="GLB"
-                  highAccuracyEvents
-                  onPinch={i === 0
-                    ? (pinchState, scaleFactor) => handlePinch(step.targetName, pinchState, scaleFactor)
-                    : undefined
-                  }
+                  onClick={handleTeardropTap}
                 />
-              ))}
-            </ViroNode>
+                {/* Larger hit box as fallback — ViroBox opacity must be > 0 to register touches */}
+                <ViroBox
+                  height={0.1}
+                  width={0.1}
+                  length={0.1}
+                  opacity={0.01}
+                  onClick={handleTeardropTap}
+                />
+              </ViroNode>
+            )}
           </ViroNode>
-        )}
-
-        {/* Teardrop collectible — present on all 7 markers */}
-        {tearState !== 'collected' && (
-          <ViroNode
-            position={TEARDROP_POSITION}
-            opacity={1}
-            animation={{
-              name: tearState === 'collecting' ? 'tearCollect' : 'tearFloat',
-              run: true,
-              loop: tearState === 'idle',
-            }}>
-            <Viro3DObject
-              source={assetUri(`models/${TEARDROP_FILE}`)}
-              resources={[]}
-              position={[0, 0, 0]}
-              scale={TEARDROP_SCALE}
-              type="GLB"
-              onClick={handleTeardropTap}
-            />
-          </ViroNode>
-        )}
-      </ViroARImageMarker>
+        </ViroARImageMarker>
       )}
     </ViroARScene>
   );
@@ -271,10 +336,10 @@ function ScannerFrame() {
 // ---------------------------------------------------------------------------
 // Rotation constants
 // ---------------------------------------------------------------------------
-const ROTATE_STEP       = 30;
+const ROTATE_STEP = 30;
 const ROTATE_HOLD_DELAY = 350;
-const ROTATE_INTERVAL   = 16;
-const ROTATE_HOLD_STEP  = 3;
+const ROTATE_INTERVAL = 16;
+const ROTATE_HOLD_STEP = 3;
 
 type PermState = 'checking' | 'granted' | 'denied';
 
@@ -282,29 +347,29 @@ type PermState = 'checking' | 'granted' | 'denied';
 // Screen
 // ---------------------------------------------------------------------------
 export default function ARStoryScreen() {
-  const navigation            = useNavigation<Nav>();
-  const route                 = useRoute<Route>();
+  const navigation = useNavigation<Nav>();
+  const route = useRoute<Route>();
   const { storyId, initialStep = 0 } = route.params;
   const { settings } = useSettings();
 
-  const [perm,          setPerm]          = useState<PermState>('checking');
-  const [currentStep,   setCurrentStep]   = useState(initialStep);
-  const [markerFound,   setMarkerFound]   = useState(false);
+  const [perm, setPerm] = useState<PermState>('checking');
+  const [currentStep, setCurrentStep] = useState(initialStep);
+  const [markerFound, setMarkerFound] = useState(false);
   const [audioFinished, setAudioFinished] = useState(false);
-  const [teardropDone,  setTeardropDone]  = useState(false);
+  const [teardropDone, setTeardropDone] = useState(false);
 
-  const hintOpacity  = useRef(new Animated.Value(0)).current;
-  const holdTimeout  = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const hintOpacity = useRef(new Animated.Value(0)).current;
+  const holdTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Keep module-level state in sync
   arStoryState.currentStep = currentStep;
-  arStoryState.planeViz    = settings.planeViz;
+  arStoryState.planeViz = settings.planeViz;
 
   // Wire screen-level callbacks
-  storyCallbacks.onMarkerFound       = () => setMarkerFound(true);
-  storyCallbacks.onMarkerLost        = () => setMarkerFound(false);
-  storyCallbacks.onAudioEnd          = () => setAudioFinished(true);
+  storyCallbacks.onMarkerFound = () => setMarkerFound(true);
+  storyCallbacks.onMarkerLost = () => setMarkerFound(false);
+  storyCallbacks.onAudioEnd = () => setAudioFinished(true);
   storyCallbacks.onTeardropCollected = () => setTeardropDone(true);
 
   // Camera permission
@@ -324,7 +389,7 @@ export default function ARStoryScreen() {
         Animated.timing(hintOpacity, { toValue: 0, duration: 600, useNativeDriver: true }),
       ]).start();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markerFound]);
 
   // Rotation button helpers
@@ -337,7 +402,7 @@ export default function ARStoryScreen() {
     }, ROTATE_HOLD_DELAY);
   };
   const stopRotation = () => {
-    if (holdTimeout.current)  { clearTimeout(holdTimeout.current);   holdTimeout.current  = null; }
+    if (holdTimeout.current) { clearTimeout(holdTimeout.current); holdTimeout.current = null; }
     if (holdInterval.current) { clearInterval(holdInterval.current); holdInterval.current = null; }
   };
 
@@ -386,10 +451,10 @@ export default function ARStoryScreen() {
     );
   }
 
-  const isLastStep    = currentStep === MARKER_STEPS.length - 1;
+  const isLastStep = currentStep === MARKER_STEPS.length - 1;
   const readyToAdvance = markerFound && audioFinished && teardropDone;
-  const showNext      = readyToAdvance && !isLastStep;
-  const showChoices   = readyToAdvance && isLastStep && !!step.endChoices;
+  const showNext = readyToAdvance && !isLastStep;
+  const showChoices = readyToAdvance && isLastStep && !!step.endChoices;
 
   // ----------- AR experience -----------
   return (
@@ -507,17 +572,17 @@ export default function ARStoryScreen() {
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
-const CORNER_SIZE      = 28;
+const CORNER_SIZE = 28;
 const CORNER_THICKNESS = 3;
 
 const styles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: '#0a0a1a' },
-  centered:   { alignItems: 'center', justifyContent: 'center', gap: 12 },
+  container: { flex: 1, backgroundColor: '#0a0a1a' },
+  centered: { alignItems: 'center', justifyContent: 'center', gap: 12 },
 
   // Permission
-  permTitle:    { fontSize: 20, fontWeight: '700', color: '#FFFFFF', textAlign: 'center', paddingHorizontal: 32 },
-  permText:     { fontSize: 14, color: '#8899BB', textAlign: 'center', paddingHorizontal: 32, marginTop: 4 },
-  permBack:     { marginTop: 8, backgroundColor: '#4488FF', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 24 },
+  permTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', textAlign: 'center', paddingHorizontal: 32 },
+  permText: { fontSize: 14, color: '#8899BB', textAlign: 'center', paddingHorizontal: 32, marginTop: 4 },
+  permBack: { marginTop: 8, backgroundColor: '#4488FF', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 24 },
   permBackText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
 
   // Step bar
@@ -542,10 +607,10 @@ const styles = StyleSheet.create({
     marginLeft: -100,
     marginTop: -100,
   },
-  corner:   { position: 'absolute', width: CORNER_SIZE, height: CORNER_SIZE, borderColor: '#4488FF' },
-  cornerTL: { top: 0,    left: 0,  borderTopWidth: CORNER_THICKNESS, borderLeftWidth: CORNER_THICKNESS },
-  cornerTR: { top: 0,    right: 0, borderTopWidth: CORNER_THICKNESS, borderRightWidth: CORNER_THICKNESS },
-  cornerBL: { bottom: 0, left: 0,  borderBottomWidth: CORNER_THICKNESS, borderLeftWidth: CORNER_THICKNESS },
+  corner: { position: 'absolute', width: CORNER_SIZE, height: CORNER_SIZE, borderColor: '#4488FF' },
+  cornerTL: { top: 0, left: 0, borderTopWidth: CORNER_THICKNESS, borderLeftWidth: CORNER_THICKNESS },
+  cornerTR: { top: 0, right: 0, borderTopWidth: CORNER_THICKNESS, borderRightWidth: CORNER_THICKNESS },
+  cornerBL: { bottom: 0, left: 0, borderBottomWidth: CORNER_THICKNESS, borderLeftWidth: CORNER_THICKNESS },
   cornerBR: { bottom: 0, right: 0, borderBottomWidth: CORNER_THICKNESS, borderRightWidth: CORNER_THICKNESS },
 
   // Found banner
@@ -618,9 +683,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(68,136,255,0.3)',
   },
   markerThumb: { width: 56, height: 56, borderRadius: 8, backgroundColor: '#FFFFFF', marginRight: 12 },
-  cardText:    { flex: 1 },
-  cardLabel:   { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
-  cardSub:     { fontSize: 12, color: '#8899BB', marginTop: 2 },
+  cardText: { flex: 1 },
+  cardLabel: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  cardSub: { fontSize: 12, color: '#8899BB', marginTop: 2 },
 
   teardropBadge: {
     backgroundColor: 'rgba(68,136,255,0.8)',
@@ -658,7 +723,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   choiceKeep: { backgroundColor: '#4488FF' },
-  choiceLet:  { backgroundColor: '#CC44FF' },
+  choiceLet: { backgroundColor: '#CC44FF' },
   choiceText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
 
   // Close

@@ -46,6 +46,22 @@ export default function HomeScreen() {
         ))}
       </View>
 
+      {/* Get Markers */}
+      <Text style={styles.sectionTitle}>Prepárate</Text>
+      <TouchableOpacity
+        style={styles.markersCard}
+        onPress={() => navigation.navigate('Markers')}>
+        <View style={styles.markersCardInner}>
+          <View style={styles.markersCardText}>
+            <Text style={styles.markersCardTitle}>Obtén los marcadores</Text>
+            <Text style={styles.markersCardSub}>
+              Imprime los 7 marcadores para vivir la historia en AR
+            </Text>
+          </View>
+          <Text style={styles.markersCardArrow}>›</Text>
+        </View>
+      </TouchableOpacity>
+
       {/* Featured story */}
       <Text style={styles.sectionTitle}>Historia destacada</Text>
       <TouchableOpacity
@@ -161,4 +177,34 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   featuredCtaText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+
+  markersCard: {
+    backgroundColor: '#111133',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1e1e44',
+    overflow: 'hidden',
+  },
+  markersCardInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 18,
+  },
+  markersCardText: { flex: 1 },
+  markersCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  markersCardSub: {
+    fontSize: 13,
+    color: '#8899BB',
+    lineHeight: 18,
+  },
+  markersCardArrow: {
+    fontSize: 24,
+    color: '#4488FF',
+    marginLeft: 12,
+  },
 });

@@ -3,6 +3,7 @@ export type ModelConfig = {
   scale: [number, number, number];
   position?: [number, number, number];
   rotation?: [number, number, number];
+  animationName?: string;
 };
 
 export type MarkerStep = {
@@ -24,7 +25,7 @@ export type Story = {
 };
 
 export const TEARDROP_FILE = 'Tear.glb';
-export const TEARDROP_SCALE: [number, number, number] = [0.0005, 0.0005, 0.0005];
+export const TEARDROP_SCALE: [number, number, number] = [0.0009, 0.0009, 0.0009];
 export const TEARDROP_POSITION: [number, number, number] = [-0.005, 0.1, 0.025];
 
 export const MARKER_STEPS: MarkerStep[] = [
@@ -75,24 +76,28 @@ export const MARKER_STEPS: MarkerStep[] = [
     audioFile: 'audio/Audio_Narrador4.wav',
   },
   {
-    // Marker 5: Niko (guide) + teardrop
+    // Marker 5: Female + Male facing opposite sides + Niko (guide) + teardrop
     index: 4,
     targetName: 'fo_marker_5',
     markerImage: require('../../assets/markers/FO-Marker5.png'),
     physicalWidth: 0.15,
     models: [
-      { file: 'Niko.glb', scale: [0.03, 0.03, 0.03], position: [0, 0, 0] },
+      { file: 'Female.glb', scale: [0.015, 0.015, 0.015], position: [-0.015, 0, 0.025], rotation: [0, -90, 0] },
+      { file: 'Male.glb', scale: [0.015, 0.015, 0.015], position: [0.01, 0, 0.025], rotation: [0, 90, 0] },
+      { file: 'Niko.glb', scale: [0.007, 0.007, 0.007], position: [-0.005, 0, 0.035], rotation:[0, 180, 0] },
     ],
     audioFile: 'audio/Audio_Narrador5.wav',
   },
   {
-    // Marker 6: Niko (guide) + teardrop
+    // Marker 6: Camp scenario + Melancolia + Niko (guide) + teardrop
     index: 5,
     targetName: 'fo_marker_6',
     markerImage: require('../../assets/markers/FO-Marker6.png'),
     physicalWidth: 0.15,
     models: [
-      { file: 'Niko.glb', scale: [0.03, 0.03, 0.03], position: [0, 0, 0] },
+      { file: 'Camp_backup.glb', scale: [0.004, 0.004, 0.004], position: [0, -0.01, 0], rotation: [0, -60, 0] },
+      { file: 'Melancolia.glb', scale: [0.015, 0.015, 0.015], position: [-0.015, 0.01, 0] },
+      { file: 'Niko.glb', scale: [0.007, 0.007, 0.007], position: [0.015, 0, 0.025], rotation: [0, 200, 0] },
     ],
     audioFile: 'audio/Audio_Narrador6.wav',
   },

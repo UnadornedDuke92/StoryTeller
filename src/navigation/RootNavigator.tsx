@@ -8,11 +8,13 @@ import StoriesScreen from '../screens/StoriesScreen';
 import OptionsScreen from '../screens/OptionsScreen';
 import StoryDetailScreen from '../screens/StoryDetailScreen';
 import ARStoryScreen from '../screens/ARStoryScreen';
+import MarkersScreen from '../screens/MarkersScreen';
 
 export type RootStackParamList = {
   MainTabs: undefined;
   StoryDetail: { storyId: string };
   ARStory: { storyId: string; initialStep?: number };
+  Markers: undefined;
 };
 
 type TabParamList = {
@@ -66,6 +68,11 @@ export default function RootNavigator() {
         name="ARStory"
         component={ARStoryScreen}
         options={{ animation: 'fade' }}
+      />
+      <Stack.Screen
+        name="Markers"
+        component={MarkersScreen}
+        options={{ animation: 'slide_from_right' }}
       />
     </Stack.Navigator>
   );
